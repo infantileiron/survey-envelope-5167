@@ -4,3 +4,6 @@ export const GEOMETRY_TYPES={point:'单位置 / point',line:'共线 / line',poly
 export const RUN_STATUSES={queued:'排队中',running:'包络计算中',completed:'已完成',failed:'失败可恢复'};
 export const REVIEW_DECISIONS={accepted:'接受并提请归档',needs_changes:'待补充依据'};
 export const COORDINATE_SYSTEMS={local_m:'局部投影米制'};
+export const RECONCILE_STATUSES={queued:'排队中',running:'对账计算中',completed:'已完成',failed:'已拒绝'};
+export const PAIR_STATUSES={essential:'必然配对',ambiguous:'归属歧义'};
+export const MATCH_STATUSES={always_matched:'必配点',sometimes_matched:'歧义归属',never_matched:'始终未配'};

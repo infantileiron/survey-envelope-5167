@@ -1,1 +1,1 @@
-export const navigation=[{id:'overview',label:'足迹总览',code:'01'},{id:'surveys',label:'原始米制点组',code:'02'},{id:'policies',label:'去重与方向口径',code:'03'},{id:'studies',label:'包络研究任务',code:'04'},{id:'results',label:'边界与面积证据',code:'05'},{id:'reviews',label:'足迹复核归档',code:'06'}];
+export const navigation=[{id:'overview',label:'足迹总览',code:'01'},{id:'surveys',label:'原始米制点组',code:'02'},{id:'policies',label:'去重与方向口径',code:'03'},{id:'studies',label:'包络研究任务',code:'04'},{id:'results',label:'边界与面积证据',code:'05'},{id:'reviews',label:'足迹复核归档',code:'06'},{id:'reconcile',label:'两点组记录对账',code:'07'}];

@@ -49,14 +49,20 @@ API必须声明local_m，每组1至300条、最多8组，组ID唯一、组内点
 
 ## 实体、精度与技术
 
-六实体 PointSurvey、BoundaryPolicy、EnvelopeStudy、EnvelopeRun、FootprintReview、Report，贯穿表/model/schema/service/route、前端API/store/page。研究快照冻结完整原始测组、去重口径、方向参数、算法版本与选组范围；运行和复核新增版本记录，报告绑定最新接受复核ID，后续复核不改旧CSV。
+七实体 PointSurvey、BoundaryPolicy、EnvelopeStudy、EnvelopeRun、FootprintReview、Report、Reconciliation，贯穿表/model/schema/service/route、前端API/store/page。研究快照冻结完整原始测组、去重口径、方向参数、算法版本与选组范围；运行和复核新增版本记录，报告绑定最新接受复核ID，后续复核不改旧CSV。对账快照冻结双方测组点组来源、距离上限与算法口径，只读原始测组、不回写。
+
+## 两点组记录对账
+
+复测换点号后，按最近点逐个配对会抢占对应点、漏报实测遗漏。对账改为整体最优：给定距离上限threshold_m，每个点最多配一次，**先使配对数最多，再使总平方距离最小**。`backend/src/services/matching.py` 把平方距离按阈值²·2^-40网格量化为int64，用平衡匈牙利（左点+虚行×右点+虚列，虚边代价D满足2D大于任何匹配的真实量化总代价）求出一个最优方案与最优对偶，再在等边子图上做Dulmage-Mendelsohn分解：列出**能出现在任一最优方案中的全部配对**，区分必然配对（出现在全部最优方案）、归属歧义（只出现在部分最优方案）与始终未配点（任何最优方案都不配对）。重合坐标不去重，按原始编号各占一个名额，同坐标点之间为并列歧义；候选按原始float64平方距离≤阈值²判定，计算前双方坐标平移到共同局部原点。
+
+每侧最多300条密集候选，计算硬上限10秒（numpy int64匈牙利+Kosaraju，实测300×300全候选<1秒），超时整份拒绝、不保存部分结果，失败记录保留原因。对账页查看连线与原始编号：圆点左侧、菱形右侧，实线必然、虚线歧义，红色为始终未配；配对台账、双侧点状态、口径与校验和分页展示。列表接口只返回计数摘要，完整结果经详情接口获取。
 
 科学坐标、group_ids、快照和结果使用 **MySQL LONGTEXT保存JSON**，由 `backend/src/config/json_type.py::PreciseJSON` 调用Python json序列化/解析，保留Float64往返数字。没有将x/y/面积声称为不存在的独立原生Double列；真正的 `boundary_policies.area_tie_relative` 是DOUBLE列。原生MySQL JSON读回百万级小数时可能改动1ULP，因此最终版本明确使用文本JSON。显示8位坐标或2位面积不改变底层值；CSV JSON保留完整往返数字。
 
 | 部分 | 技术 |
 |---|---|
 | 前端 | Vue3、TypeScript、Vite、真实比例SVG点组/边界 |
-| API/算法 | Python3.11、FastAPI、SQLAlchemy、标准库几何算法/JWT |
+| API/算法 | Python3.11、FastAPI、SQLAlchemy、标准库几何算法/JWT、numpy int64对账匈牙利 |
 | 后台 | Redis真实队列、独立worker及心跳健康检查 |
 | 数据库 | MySQL8.4，科学数组LONGTEXT JSON、口径容差DOUBLE |
 | Docker | 恰好frontend/backend/worker/db/redis，五服务均真实健康检查 |
@@ -65,11 +71,11 @@ API必须声明local_m，每组1至300条、最多8组，组ID唯一、组内点
 
 `.env.example`：COMPOSE_PROJECT_NAME=survey-envelope，FRONTEND_PORT=18237，BACKEND_PORT=19237，DB_PORT=17737，SEED_DEMO=true，JWT_SECRET；数据库/Redis连接在compose注入。三个命名卷保存数据库、Redis、worker产物，Nginx代理/api并SPA回落，健康检查用127.0.0.1。前端依赖用匹配锁执行npm ci。开发时前端 `npm ci && npm run dev`，API `uvicorn src.main:app --host 0.0.0.0`，worker `python -m src.worker`，设置可连接的DATABASE_URL/REDIS_URL。
 
-role、deduplication、coordinate_system、run_status、review_decision、geometry_type枚举位于 `backend/src/constants/enums.py` 和 `frontend/src/constants/enums.ts`，schema Literal与服务共同约束实际口径。
+role、deduplication、coordinate_system、run_status、review_decision、geometry_type、pair_status、match_status枚举位于 `backend/src/constants/enums.py` 和 `frontend/src/constants/enums.ts`，schema Literal与服务共同约束实际口径。
 
 ## 边界与清理
 
-仅局部二维平面，不读取经纬度或执行投影；精确浮点去重不是测量误差聚合。没有凹包、真实覆盖估计或行政边界推断。有限精度与同面积容差公开；单worker无生产级租约，无生产迁移回滚或多租户隔离。原生JSON旧表迁移不自动执行，本演示使用已验收的全新LONGTEXT schema；生产迁移需单独设计。
+仅局部二维平面，不读取经纬度或执行投影；精确浮点去重不是测量误差聚合。没有凹包、真实覆盖估计或行政边界推断。有限精度与同面积容差公开；对账平方距离按阈值²·2^-40网格量化比较，网格内视为同距并列进入归属歧义，不做人为就近抢占。单worker无生产级租约，无生产迁移回滚或多租户隔离。原生JSON旧表迁移不自动执行，本演示使用已验收的全新LONGTEXT schema；生产迁移需单独设计。
 
 ```sh
 docker compose down -v --remove-orphans

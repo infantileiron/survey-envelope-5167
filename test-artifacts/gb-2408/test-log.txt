@@ -1,0 +1,7 @@
+brute-force x 400 OK
+determinism OK
+coincident OK
+timeout OK
+dense 300x300: 0.39s pairs=300 allowed=300
+performance OK
+service integration OK: pairs 20 essential 8 ambiguous 24

@@ -1,8 +1,9 @@
 import math,random,json
 from sqlalchemy import select,func
 from src.config.database import Base,engine,Session
-from src.models import User,PointSurvey,BoundaryPolicy,EnvelopeStudy,EnvelopeRun,FootprintReview,Report
+from src.models import User,PointSurvey,BoundaryPolicy,EnvelopeStudy,EnvelopeRun,FootprintReview,Report,Reconciliation
 from src.services.analysis import analyze
+from src.services.matching import run_reconciliation
 from src.utils.security import hash_password
 from src.utils.time import now
 from src.utils.serialization import serialize
@@ -31,5 +32,21 @@ def seed():
    study=db.get(EnvelopeStudy,'demo-study');db.add(EnvelopeRun(id='demo-run',study_id='demo-study',status='completed',result=analyze(study.snapshot,study.group_ids),error='',created_at=now()));db.flush()
   if not db.get(FootprintReview,'demo-review'):db.add(FootprintReview(id='demo-review',run_id='demo-run',version=1,note='已核对local_m米制声明、原始点/精确去重计数与三种面积。凸包填凹口不代表真实覆盖，共线/单位置保留退化类型，不能伪造采集面。',decision='accepted',author='analyst@lantu.demo',created_at=now()));db.flush()
   if not db.get(Report,'demo-report'):db.add(Report(id='demo-report',run_id='demo-run',review_id='demo-review',title='岚图足迹·包络人工复核稿',published_by='admin@lantu.demo',created_at=now()))
-  db.commit();return {m.__tablename__:db.scalar(select(func.count()).select_from(m)) for m in (User,PointSurvey,BoundaryPolicy,EnvelopeStudy,EnvelopeRun,FootprintReview,Report)}
+  # 复测测组：换点号、漏测8点、新增5点，重合坐标保留各自编号
+  source_g03=next(g for g in groups if g['group_id']=='G03')
+  resurvey=[]
+  for i,p in enumerate(source_g03['points']):
+   if i%15==3:continue
+   resurvey.append({'point_id':f'R{i+1:03d}','x':p['x'],'y':p['y']})
+  for t in range(5):resurvey.append({'point_id':f'R9{t+1:02d}','x':round(5560+18*math.cos(t*1.7),9),'y':round(7090+13*math.sin(t*1.7),9)})
+  if not db.get(PointSurvey,'demo-resurvey'):db.add(PointSurvey(id='demo-resurvey',name='岚图·复测换号足迹',source='lantu_local_footprints_resurvey_20261114.json',coordinate_system='local_m',groups=[{'group_id':'R03','name':'复测G03·换点号补测','points':resurvey}],created_at=now()));db.flush()
+  if not db.get(Reconciliation,'demo-reconciliation'):
+   survey=db.get(PointSurvey,'demo-survey');resurvey_survey=db.get(PointSurvey,'demo-resurvey')
+   def side(s,gid):
+    g=next(g for g in s.groups if g['group_id']==gid)
+    return {'survey_id':s.id,'survey_name':s.name,'source':s.source,'coordinate_system':s.coordinate_system,'group_id':g['group_id'],'group_name':g['name'],'group':g}
+   snapshot={'left':side(survey,'G03'),'right':side(resurvey_survey,'R03'),'threshold_m':0.5}
+   result,summary=run_reconciliation(snapshot)
+   db.add(Reconciliation(id='demo-reconciliation',name='G03复测换号对账',left_survey_id='demo-survey',left_group_id='G03',right_survey_id='demo-resurvey',right_group_id='R03',threshold_m=0.5,snapshot=snapshot,status='completed',summary=summary,result=result,error='',created_at=now()));db.flush()
+  db.commit();return {m.__tablename__:db.scalar(select(func.count()).select_from(m)) for m in (User,PointSurvey,BoundaryPolicy,EnvelopeStudy,EnvelopeRun,FootprintReview,Report,Reconciliation)}
 if __name__=='__main__':print(json.dumps(seed(),ensure_ascii=False))
